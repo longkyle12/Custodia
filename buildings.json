@@ -1,0 +1,16 @@
+{
+    "test": {
+        "name": "test",
+        "total_time": 4,
+        "remaining_time": 4,
+        "description": "nope",
+        "cost": {},
+        "production": {
+            "fort": 3,
+            "night": 4
+        },
+        "consumption": {
+            "44": 33
+        }
+    }
+}

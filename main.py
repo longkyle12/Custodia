@@ -5,6 +5,7 @@ import json
 
 
 
+
 # Resources
 
 @dataclass
@@ -61,6 +62,36 @@ class Building:
     consumption: Dict[str, int]
     description: str
     
+BUILDINGS_FILE = "buildings.json"
+AVAILABLE_BUILDINGS: Dict[str, BuildingProject] = {}
+
+def save_available_buildings():
+    data = {
+        name: asdict(project)
+        for name, project in AVAILABLE_BUILDINGS.items()
+    }
+    with open(BUILDINGS_FILE, "w") as f:
+        json.dump(data, f, indent=4)
+
+
+def load_available_buildings():
+    try:
+        with open(BUILDINGS_FILE, "r") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        return  # No file yet, that’s fine
+
+    for name, proj in data.items():
+        AVAILABLE_BUILDINGS[name] = BuildingProject(
+            name=proj["name"],
+            total_time=proj["total_time"],
+            remaining_time=proj["remaining_time"],
+            description=proj["description"],
+            cost=proj.get("cost", {}),
+            production=proj.get("production", {}),
+            consumption=proj.get("consumption", {})
+        )
+
 # City
 @dataclass
 class City:
@@ -110,6 +141,70 @@ class City:
         # Return results for log
         return f"{self.name} resolved action: {action}"
     
+# Building CLI
+def manage_available_buildings():
+    while True:
+        print("\n=== BUILDABLE STRUCTURES MENU ===")
+        print("1. List Buildable Structures")
+        print("2. Add New Structure Template")
+        print("0. Back")
+
+        choice = input("> ").strip()
+
+        if choice == "0":
+            return
+
+        elif choice == "1":
+            if not AVAILABLE_BUILDINGS:
+                print("No building templates added.")
+            else:
+                print("\nTemplates available to all cities:")
+                for b in AVAILABLE_BUILDINGS.values():
+                    print(f"• {b.name} ({b.total_time} days)")
+
+        elif choice == "2":
+            name = input("Name: ").strip()
+            time = int(input("Construction time (days): ").strip())
+
+            # Create dictionary entries
+            production = {}
+            consumption = {}
+            cost = {}
+
+            print("Enter production (empty key to stop):")
+            while True:
+                key = input(" Resource: ").strip()
+                if key == "":
+                    break
+                value = int(input(" Amount: "))
+                production[key] = value
+
+            print("Enter consumption (empty key to stop):")
+            while True:
+                key = input(" Resource: ").strip()
+                if key == "":
+                    break
+                value = int(input(" Amount: "))
+                consumption[key] = value
+
+            description = input("Description: ").strip()
+
+            AVAILABLE_BUILDINGS[name] = BuildingProject(
+                name=name,
+                total_time=time,
+                remaining_time=time,
+                cost=cost,
+                production=production,
+                consumption=consumption,
+                description=description
+            )
+            save_available_buildings()
+            print(f"Added structure template: {name}")
+
+        else:
+            print("Invalid selection.")
+
+
 # Kingdom
 
 @dataclass
@@ -125,7 +220,7 @@ class Kingdom:
     # Stat
 
     def update_kingdom_stats(self):
-        if not self.cites:
+        if not self.cities:
             return
         
         self.saftey = int(sum(c.resources.security for c in self.cities) / len(self.cities))
@@ -162,7 +257,7 @@ class Kingdom:
         # End
         turn_log.append("=== END PHASE ===")
         self.update_kingdom_stats()
-        turn_log.append(f"Kingdom Safety: {self.safety}")
+        turn_log.append(f"Kingdom Saftey: {self.saftey}")
         turn_log.append(f"Kingdom Happiness: {self.happiness}")
 
         return turn_log
@@ -219,3 +314,246 @@ def load_kingdom(filename="kingdom.json") -> Kingdom:
 
     k = Kingdom(name=data["name"], cities=cities)
     return k
+
+
+
+def run_cli(kingdom: Kingdom):
+    while True:
+        load_available_buildings()
+        print("\n===== KINGDOM MENU =====")
+        print(f"Kingdom: {kingdom.name}")
+        print("1. List Cities")
+        print("2. View Kingdom Stats")
+        print("3. Save Kingdom")
+        print("4. Next Turn")
+        print("5. Manage Buildable Structures")
+        print("0. Quit")
+
+        choice = input("> ").strip()
+
+        # ---- List Cities ----
+        if choice == "1":
+            city_selector(kingdom)
+
+        # ---- Kingdom Stats ----
+        elif choice == "2":
+            print("\n=== KINGDOM STATS ===")
+            print(f"Safety: {kingdom.saftey}")
+            print(f"Happiness: {kingdom.happiness}")
+
+        # ---- Save ----
+        elif choice == "3":
+            save_kingdom(kingdom)
+            print("Kingdom saved.")
+
+        # ---- Turn Resolution ----
+        elif choice == "4":
+            logs = kingdom.resolve_turn()
+            print("\n".join(logs))
+        
+        elif choice == "5":
+            manage_available_buildings()
+
+        # ---- Quit ----
+        elif choice == "0":
+            print("Exiting...")
+            break
+
+        else:
+            print("Invalid selection. Try again.")
+
+
+#  City Selector
+
+
+def city_selector(kingdom: Kingdom):
+    while True:
+        print("\n===== CITY LIST =====")
+        for i, c in enumerate(kingdom.cities, start=1):
+            print(f"{i}. {c.name}")
+        print("0. Back")
+
+        choice = input("> ").strip()
+        if choice == "0":
+            return
+
+        if not choice.isdigit() or not (1 <= int(choice) <= len(kingdom.cities)):
+            print("Invalid selection.")
+            continue
+
+        city = kingdom.cities[int(choice) - 1]
+        city_menu(city)
+
+
+# City Menu
+
+def city_menu(city: City):
+    while True:
+        print(f"\n===== CITY: {city.name} =====")
+        print("1. View Resources")
+        print("2. View Buildings")
+        print("3. View Construction Queue")
+        print("4. Start Construction")
+        print("0. Back")
+
+        choice = input("> ").strip()
+
+        if choice == "0":
+            return
+
+        elif choice == "1":
+            show_city_resources(city)
+
+        elif choice == "2":
+            buildings_menu(city)
+
+        elif choice == "3":
+            show_construction_queue(city)
+
+        elif choice == "4":
+            start_construction_cli(city)
+
+        else:
+            print("Invalid option.")
+
+def start_construction_cli(city: City):
+    if city.construction_queue:
+        print("City already has an active construction project!")
+        return
+
+    if not AVAILABLE_BUILDINGS:
+        print("No available buildings to construct. Add some in the main menu.")
+        return
+
+    print("\n=== START CONSTRUCTION ===")
+    print("Choose a building to start:")
+
+    keys = list(AVAILABLE_BUILDINGS.keys())
+    for i, name in enumerate(keys, start=1):
+        b = AVAILABLE_BUILDINGS[name]
+        print(f"{i}. {b.name} ({b.total_time} days)")
+
+    print("0. Cancel")
+
+    choice = input("> ").strip()
+    if choice == "0":
+        return
+
+    if not choice.isdigit() or not (1 <= int(choice) <= len(keys)):
+        print("Invalid selection.")
+        return
+
+    selected_name = keys[int(choice) - 1]
+    template = AVAILABLE_BUILDINGS[selected_name]
+
+    # Create a fresh project instance
+    project = BuildingProject(
+        name=template.name,
+        total_time=template.total_time,
+        remaining_time=template.total_time,
+        description=template.description,
+        cost=template.cost.copy(),
+        production=template.production.copy(),
+        consumption=template.consumption.copy()
+    )
+
+    city.start_construction(project)
+    print(f"{city.name} has begun construction of {project.name}.")
+
+
+#     Display Resources
+
+def show_city_resources(city: City):
+    print(f"\n=== RESOURCES: {city.name} ===")
+    r = city.resources
+    print(f"Gold: {r.gold}")
+    print(f"Food: {r.food}")
+    print(f"Loyalty: {r.loyalty}")
+    print(f"Security: {r.security}")
+    print(f"Raw Goods: {r.raw_goods}")
+    print(f"Manufactured Goods: {r.manufactured_goods}")
+    print(f"Rare Goods: {r.rare_goods}")
+    print(f"Prosperity: {r.prosperity}")
+
+
+#   Buildings Menu
+
+def buildings_menu(city: City):
+    while True:
+        print(f"\n=== BUILDINGS IN {city.name} ===")
+
+        if not city.completed_buildings:
+            print("No completed buildings.")
+            return
+
+        for i, b in enumerate(city.completed_buildings, start=1):
+            print(f"{i}. {b.name}")
+        print("0. Back")
+
+        choice = input("> ").strip()
+        if choice == "0":
+            return
+
+        if not choice.isdigit() or not (1 <= int(choice) <= len(city.completed_buildings)):
+            print("Invalid selection.")
+            continue
+
+        building = city.completed_buildings[int(choice) - 1]
+        show_building_details(building)
+
+
+# Display Buildings Details
+
+def show_building_details(building: Building):
+    print(f"\n=== {building.name.upper()} ===")
+    print(f"Description: {building.description}")
+
+    print("\nProduction:")
+    for k, v in building.production.items():
+        print(f"  +{v} {k}")
+
+    print("\nConsumption:")
+    if building.consumption:
+        for k, v in building.consumption.items():
+            print(f"  -{v} {k}")
+    else:
+        print("  None")
+
+
+# Construction Queue
+
+def show_construction_queue(city: City):
+    print(f"\n=== CONSTRUCTION QUEUE: {city.name} ===")
+    if not city.construction_queue:
+        print("No active construction projects.")
+        return
+
+    for project in city.construction_queue:
+        print(f"- {project.name}: {project.remaining_time}/{project.total_time} days remaining")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+if __name__ == "__main__":
+    try:
+        kingdom = load_kingdom()
+        print("Loaded existing kingdom.")
+    except:
+        kingdom = Kingdom(name="My Kingdom")
+        print("Created new kingdom.")
+
+    run_cli(kingdom)
