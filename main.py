@@ -11,7 +11,8 @@ import json
 @dataclass
 class ResourcePool:
     gold: int=0
-    food: int=0
+    population: int=0
+    food: int=50
     loyalty: int=50
     security: int=50
 
@@ -26,16 +27,6 @@ class ResourcePool:
             if hasattr(self,k):
                 setattr(self, k, getattr(self, k)+v)
         
-
-# City Statss
-
-@dataclass
-class CityStats:
-    economy: int=0 # Gold Gen
-    culture: int=0 # loyalty
-    agriculture: int=0 # food
-    industry: int=0 # Goods
-    military: int=0 # Security
 
 # Buildings
 @dataclass
@@ -97,7 +88,6 @@ def load_available_buildings():
 class City:
     name: str
     resources: ResourcePool = field(default_factory=ResourcePool)
-    stats: CityStats = field(default_factory=CityStats)
 
     construction_queue: List[BuildingProject] = field(default_factory=list)
     completed_buildings: List["Building"] = field(default_factory=list)
@@ -120,7 +110,7 @@ class City:
             self.construction_queue.pop(0)
             finished = Building(
                 name=project.name,
-                production=property.production,
+                production=project.production,
                 consumption=project.consumption,
                 descritpion= project.description
             )
@@ -278,7 +268,6 @@ def load_kingdom(filename="kingdom.json") -> Kingdom:
     for c in data["cities"]:
 
         resources=ResourcePool(**c["resources"])
-        stats=CityStats(**c["stats"])
 
         construction_queue = []
         for proj in c.get("construction_queue", []):
@@ -304,7 +293,6 @@ def load_kingdom(filename="kingdom.json") -> Kingdom:
         city = City(
             name=c["name"],
             resources=resources,
-            stats=stats,
             construction_queue=construction_queue,
             completed_buildings=completed_buildings,
             declared_action=c.get("declared_action")
@@ -315,6 +303,51 @@ def load_kingdom(filename="kingdom.json") -> Kingdom:
     k = Kingdom(name=data["name"], cities=cities)
     return k
 
+def add_city_cli(kingdom: Kingdom):
+    name = input("Enter new city name: ").strip()
+    if not name:
+        print("City name cannot be empty.")
+        return
+
+    # Create new city
+    new_city = City(name=name)
+
+    kingdom.cities.append(new_city)
+    print(f"City '{name}' added to the kingdom.")
+
+    # Mark action for the turn
+    kingdom.declared_kingdom_action = f"Added City: {name}"
+
+# Kingdom Action Menu
+def kingdom_action_menu(kingdom: Kingdom):
+    print("\n=== KINGDOM ACTIONS ===")
+    actions = [
+        "Add New City",
+        "Raise Taxes",
+        "Hold Festival",
+        "Do Nothing"
+    ]
+
+    for i, action in enumerate(actions, start=1):
+        print(f"{i}. {action}")
+    print("0. Cancel")
+
+    choice = input("> ").strip()
+    if choice == "0":
+        return
+
+    if not choice.isdigit() or not (1 <= int(choice) <= len(actions)):
+        print("Invalid option.")
+        return
+
+    chosen = actions[int(choice) - 1]
+
+    if chosen == "Add New City":
+        add_city_cli(kingdom)
+        return
+
+    kingdom.declared_kingdom_action = chosen
+    print(f"Kingdom will: {chosen}")
 
 
 def run_cli(kingdom: Kingdom):
@@ -327,6 +360,7 @@ def run_cli(kingdom: Kingdom):
         print("3. Save Kingdom")
         print("4. Next Turn")
         print("5. Manage Buildable Structures")
+        print("6. Set Kingdom Action")
         print("0. Quit")
 
         choice = input("> ").strip()
@@ -353,6 +387,9 @@ def run_cli(kingdom: Kingdom):
         
         elif choice == "5":
             manage_available_buildings()
+
+        elif choice == "6":
+            kingdom_action_menu(kingdom)
 
         # ---- Quit ----
         elif choice == "0":
@@ -394,6 +431,7 @@ def city_menu(city: City):
         print("2. View Buildings")
         print("3. View Construction Queue")
         print("4. Start Construction")
+        print("5. Set City Action")
         print("0. Back")
 
         choice = input("> ").strip()
@@ -413,8 +451,36 @@ def city_menu(city: City):
         elif choice == "4":
             start_construction_cli(city)
 
+        elif choice == "5":
+            set_city_action(city)
         else:
             print("Invalid option.")
+
+def set_city_action(city: City):
+    print(f"\n=== ACTIONS FOR {city.name} ===")
+    actions = [
+        "Gather Resources",
+        "Increase Loyalty",
+        "Patrol City",
+        "Train Militia",
+        "Do Nothing"
+    ]
+
+    for i, action in enumerate(actions, start=1):
+        print(f"{i}. {action}")
+    print("0. Cancel")
+
+    choice = input("> ").strip()
+    if choice == "0":
+        return
+
+    if not choice.isdigit() or not (1 <= int(choice) <= len(actions)):
+        print("Invalid action.")
+        return
+
+    city.declared_action = actions[int(choice) - 1]
+    print(f"{city.name} will: {city.declared_action}")
+
 
 def start_construction_cli(city: City):
     if city.construction_queue:
